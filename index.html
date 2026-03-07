@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jewelry QA/QC Analyzer</title>
+  <meta name="description"
+    content="Premium AI-powered quality analytics dashboard for jewelry manufacturing — powered by Claude & SQL.js" />
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- SQL.js (SQLite in-browser via WASM) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+  <div id="app">
+
+    <!-- ===== HEADER ===== -->
+    <header id="header">
+      <div class="header-brand">
+        <div class="header-logo">💎</div>
+        <div>
+          <div class="header-title">Jewelry QA/QC Analyzer</div>
+          <div class="header-subtitle">AI-Powered Quality Intelligence Dashboard</div>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="api-key-wrapper" style="cursor:default;">
+          <span class="api-key-icon">🤖</span>
+          <span style="font-size:12px;color:var(--accent-jade);font-weight:600;letter-spacing:0.3px;">Local AI Engine ·
+            No key needed</span>
+        </div>
+        <div class="db-status loading" id="dbStatus">
+          <div class="db-status-dot"></div>
+          <span id="dbStatusText">Loading…</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ===== SIDEBAR ===== -->
+    <aside id="sidebar">
+
+      <!-- Dataset selector -->
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Dataset</div>
+        <div class="dataset-toggle">
+          <button class="dataset-btn" data-dataset="qa" onclick="setDataset('qa')">QA</button>
+          <button class="dataset-btn active" data-dataset="both" onclick="setDataset('both')">Both</button>
+          <button class="dataset-btn" data-dataset="qc" onclick="setDataset('qc')">QC</button>
+        </div>
+      </div>
+
+      <!-- Quick query chips -->
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Quick Queries</div>
+        <div class="quick-chips">
+          <button class="chip" onclick="runQuickQuery('Top 10 defect types by frequency')">
+            <span class="chip-icon">🔎</span> Top defect types
+          </button>
+          <button class="chip" onclick="runQuickQuery('Worst performing vendor by failure count')">
+            <span class="chip-icon">⚠️</span> Worst performing vendor
+          </button>
+          <button class="chip" onclick="runQuickQuery('Inspector performance summary showing pass rate per inspector')">
+            <span class="chip-icon">👷</span> Inspector performance
+          </button>
+          <button class="chip" onclick="runQuickQuery('Top defective components by total fail and rework count')">
+            <span class="chip-icon">🔩</span> Top defective components
+          </button>
+          <button class="chip" onclick="runQuickQuery('Monthly defect trend showing count by month')">
+            <span class="chip-icon">📈</span> Monthly defect trend
+          </button>
+          <button class="chip"
+            onclick="runQuickQuery('Severity distribution showing count of Low, Medium, High records')">
+            <span class="chip-icon">🎯</span> Severity distribution
+          </button>
+          <button class="chip" onclick="runQuickQuery('Top 5 batch IDs with most failures')">
+            <span class="chip-icon">📦</span> Worst batches
+          </button>
+          <button class="chip" onclick="runQuickQuery('Overall pass fail rework rate as percentages')">
+            <span class="chip-icon">✅</span> Pass/Fail/Rework rates
+          </button>
+        </div>
+      </div>
+
+      <!-- Recent queries -->
+      <div class="recent-queries">
+        <div class="sidebar-section-title" style="padding:16px 16px 4px">Recent Queries</div>
+        <div id="recentList">
+          <div class="recent-empty">No queries yet</div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ===== MAIN PANEL ===== -->
+    <main id="main">
+
+      <!-- KPI Cards -->
+      <div class="kpi-grid">
+        <div class="kpi-card qa">
+          <div class="kpi-header">
+            <div class="kpi-icon">📋</div>
+            <span class="kpi-badge">QA</span>
+          </div>
+          <div class="kpi-value" id="kpiQA">—</div>
+          <div class="kpi-label">Total QA Records</div>
+        </div>
+
+        <div class="kpi-card qc">
+          <div class="kpi-header">
+            <div class="kpi-icon">🔬</div>
+            <span class="kpi-badge">QC</span>
+          </div>
+          <div class="kpi-value" id="kpiQC">—</div>
+          <div class="kpi-label">Total QC Records</div>
+        </div>
+
+        <div class="kpi-card rate">
+          <div class="kpi-header">
+            <div class="kpi-icon">⚡</div>
+            <span class="kpi-badge">RATE</span>
+          </div>
+          <div class="kpi-value" id="kpiDefectRate">—</div>
+          <div class="kpi-label">Overall Defect Rate</div>
+        </div>
+
+        <div class="kpi-card top">
+          <div class="kpi-header">
+            <div class="kpi-icon">🔴</div>
+            <span class="kpi-badge">TOP</span>
+          </div>
+          <div class="kpi-value" id="kpiTopComponent">—</div>
+          <div class="kpi-label">Top Defective Component</div>
+        </div>
+      </div>
+
+      <!-- Query Panel -->
+      <div class="query-panel" id="queryPanel">
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay">
+          <div class="spinner"></div>
+          <div class="loading-text">Analyzing your query…</div>
+          <div class="loading-subtext" id="loadingSubtext">Running local SQL engine…</div>
+        </div>
+
+        <div class="query-panel-title">
+          🤖 &nbsp;Ask anything about your quality data
+        </div>
+
+        <div class="query-input-row">
+          <div class="query-input-wrapper">
+            <span class="query-input-icon">💬</span>
+            <input type="text" id="queryInput" placeholder="e.g. Which vendor has the most failures in April 2025?"
+              autocomplete="off" />
+          </div>
+          <button id="analyzeBtn" onclick="handleAnalyze()">
+            ✨ Analyze
+          </button>
+        </div>
+      </div>
+
+      <!-- Results Panel -->
+      <div class="results-panel">
+        <div class="results-tabs">
+          <button class="tab-btn active" id="tabAnswer" onclick="switchTab('answer')">
+            💬 Answer
+          </button>
+          <button class="tab-btn" id="tabTable" onclick="switchTab('table')">
+            📊 Table
+          </button>
+          <button class="tab-btn" id="tabChart" onclick="switchTab('chart')">
+            📈 Chart
+          </button>
+          <div class="results-actions">
+            <button id="exportBtn" onclick="exportCSV()" disabled>
+              ⬇️ Export CSV
+            </button>
+          </div>
+        </div>
+
+        <div class="results-body">
+          <!-- Answer Tab -->
+          <div class="tab-panel active" id="answerPanel">
+            <div class="answer-placeholder">
+              <div class="answer-placeholder-icon">💎</div>
+              <div class="answer-placeholder-text">Ask a question about your QA/QC data</div>
+              <div class="answer-placeholder-sub">Use the quick chips in the sidebar or type your own query above</div>
+            </div>
+          </div>
+
+          <!-- Table Tab -->
+          <div class="tab-panel" id="tablePanel">
+            <div class="no-data">
+              <div class="no-data-icon">📭</div>
+              <div class="no-data-text">Run a query to see results here</div>
+            </div>
+          </div>
+
+          <!-- Chart Tab -->
+          <div class="tab-panel" id="chartPanel">
+            <div class="chart-container">
+              <canvas id="myChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast">
+    <span class="toast-icon" id="toastIcon">ℹ️</span>
+    <span class="toast-msg" id="toastMsg"></span>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
